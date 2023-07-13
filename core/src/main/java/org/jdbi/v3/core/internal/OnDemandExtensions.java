@@ -26,7 +26,7 @@ import java.util.stream.Stream;
 import org.jdbi.v3.core.Jdbi;
 import org.jdbi.v3.core.config.JdbiConfig;
 import org.jdbi.v3.core.extension.Extensions;
-import org.jdbi.v3.core.internal.exceptions.Unchecked;
+import org.jdbi.v3.core.internal.exceptions.Sneaky;
 
 import static org.jdbi.v3.core.internal.JdbiClassUtils.EQUALS_METHOD;
 import static org.jdbi.v3.core.internal.JdbiClassUtils.HASHCODE_METHOD;
@@ -84,12 +84,16 @@ public class OnDemandExtensions implements JdbiConfig<OnDemandExtensions> {
     }
 
     private static Object invoke(Object target, Method method, Object[] args) {
-        if (Proxy.isProxyClass(target.getClass())) {
-            InvocationHandler handler = Proxy.getInvocationHandler(target);
-            return Unchecked.<Object[], Object>function(params -> handler.invoke(target, method, params)).apply(args);
-        } else {
-            MethodHandle handle = Unchecked.function(MethodHandles.lookup()::unreflect).apply(method).bindTo(target);
-            return Unchecked.<Object[], Object>function(handle::invokeWithArguments).apply(args);
+        try {
+            if (Proxy.isProxyClass(target.getClass())) {
+                InvocationHandler handler = Proxy.getInvocationHandler(target);
+                return handler.invoke(target, method, args);
+            } else {
+                MethodHandle handle = MethodHandles.lookup().unreflect(method).bindTo(target);
+                return handle.invokeWithArguments(args);
+            }
+        } catch (Throwable t) {
+            throw Sneaky.throwAnyway(t);
         }
     }
 
